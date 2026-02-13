@@ -1,79 +1,100 @@
-# Fancy MOTD
-Fancy, colorful MOTD written in bash. Server status at a glance.
+# welcome2u
 
-![MOTD screenshot](readme-img.png)
+A colorful system information display for your terminal, written in Rust. Shows a dashboard of system status every time you open a shell.
+
+Inspired by [fancy-motd](https://github.com/bcyran/fancy-motd).
+
+## What it shows
+
+All segments gather data concurrently and render using [Ratatui](https://ratatui.rs/):
+
+| Segment | Description |
+|---------|-------------|
+| **Heading** | ASCII art title (random Figlet font) with a fortune quote |
+| **Quote** | Random quote from a fortune file |
+| **User** | `username@hostname` |
+| **IP** | Local IP address |
+| **OS** | Operating system and version |
+| **Uptime** | Time since last boot |
+| **Load** | CPU load averages (1/5/15 min), color-coded by core count |
+| **Temperatures** | Hardware sensor readings with status coloring |
+| **Updates** | Available macOS system updates |
+| **Disk** | Usage per mount point with progress bars |
+| **Memory** | RAM usage with a visual gauge |
+| **Docker** | Container status and uptime |
+
+## Requirements
+
+- **Rust** (2021 edition) — for building
+- **macOS** — hardcoded paths assume macOS and Homebrew for now
+- [figlet](http://www.figlet.org/) — `brew install figlet`
+- [fortune](https://software.clapper.org/fortune/) — `brew install fortune`
+- [Colima](https://github.com/abiosoft/colima) or Docker — for the Docker segment (optional; gracefully skipped if unavailable)
+
+## Building
+
+```shell
+git clone https://github.com/technicalpickles/welcome2u.git
+cd welcome2u
+cargo build --release
+```
+
+The binary is at `target/release/welcome2u`.
 
 ## Usage
 
-### Running
-Clone the repository:
+Run it directly:
+
 ```shell
-git clone https://github.com/bcyran/fancy-motd.git
-```
-
-Then run `motd.sh`:
-```shell
-./fancy-motd/motd.sh
-```
-
-This runs all the scripts in `modules` directory in order, `run-parts` style, and formats the output.
-
-If any modules are missing in your output, plese see [requirements](#requirements).
-
-You can also pass the config file path as the script argument (see [configuration](#configuration)):
-```shell
-./fancy-motd/motd.sh ./path/to/config.sh
+./target/release/welcome2u
 ```
 
 ### Running at login
-One way to run it at each login is to add a line to `~/.profile` file (assuming you cloned `fancy-motd` into your home directory):
+
+Add to your shell profile (`~/.profile`, `~/.zshrc`, `~/.config/fish/config.fish`, etc.):
+
 ```shell
-~/fancy-motd/motd.sh
+~/path/to/welcome2u
 ```
 
-If you don't want to run it in all subshells you could do something like this instead:
-```shell
-if [ -z "$FANCY_MOTD" ]; then
-    ~/fancy-motd/motd.sh
-    export FANCY_MOTD=1
-fi
+### Environment variables
+
+| Variable | Effect |
+|----------|--------|
+| `WELCOME2U=0` | Disable output entirely (exit immediately) |
+| `MOTD_PROFILE=debug` | Enable debug logging and flame graph profiling to `log/` |
+
+## Architecture
+
+The codebase is organized as a Cargo workspace:
+
+```
+crates/
+  segment/       # Core traits: SegmentRenderer, Info, InfoBuilder
+  fortune/       # Fortune file parser
+  lolcat/        # Rainbow text coloring
+segments/
+  heading/       # Each segment is its own crate
+  disk/
+  docker/
+  ...
+src/main.rs      # Spawns all segments concurrently, renders with Ratatui
 ```
 
-If you use `tmux` and don't want to see the motd everytime you open a new shell in `tmux`, add this to your `.tmux.conf`:
-```
-set-option -ga update-environment ' FANCY_MOTD'
-```
+Each segment implements three traits:
+- `Info` — holds the gathered data
+- `InfoBuilder` — async data gathering
+- `SegmentRenderer` — renders into a Ratatui frame
 
-### Requirements
-In order to run all the available modules the following programs are required:
+To add a new segment: create a crate in `segments/`, implement the three traits, wire it into `main.rs`.
 
-* [`figlet`](http://www.figlet.org/)
-* [`curl`](https://curl.se/)
-* [`bc`](https://www.gnu.org/software/bc/)
-* [`fortune`](https://software.clapper.org/fortune/)
-* [`lm-sensors`](https://github.com/lm-sensors/lm-sensors)
+## Known limitations
 
-This list excludes the obvious ones, like [`tmux`](https://github.com/tmux/tmux) for `tmux` module.
-
-If any program requried by the given module is missing (or any other error occurs), it will fail silently, i.e. the module just won't be shown at all.
-
-
-### Configuration
-You can configure some aspects of the motd using config file.
-By default `config.sh` file in the `fancy-motd` directory will be read if it exists.
-Alternatively you can pass path to another config as a script argument.
-
-There's an example file provided in the repo:
-```shell
-cd fancy-motd
-cp config.sh.example config.sh
-```
-
-## Hacking
-To add a new module you can create a new script in `modules` directory.
-For the output to be properly formatted it has to use `print_columns` function from `framework.sh`, please refer to the existing modules.
-
-Module files have to start with a two digit number followed by a hyphen. You may disable modules by simply rename the module file.
+- Paths for Figlet fonts and fortune files are hardcoded to Homebrew locations (`/opt/homebrew/opt/...`)
+- Docker socket path is hardcoded to a specific Colima instance
+- No configuration file yet — thresholds are set in code (e.g., memory warning at 80%, critical at 90%)
+- macOS only for now
 
 ## Credits
-Fancy MOTD is hugely inspired by [this repo](https://github.com/HermannBjorgvin/MOTD) by Hermann Björgvin.
+
+Inspired by [fancy-motd](https://github.com/bcyran/fancy-motd) by Bazyli Cyran, which was in turn inspired by [MOTD](https://github.com/HermannBjorgvin/MOTD) by Hermann Bjorgvin.
